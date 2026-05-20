@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><%= title %> · MySQL Backup Manager</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1><%= title %></h1>
+        <p>MODE <strong><%= config.mode %></strong> · 비밀번호는 Redis에 평문 저장됩니다.</p>
+      </div>
+      <a class="button" href="/">목록</a>
+    </header>
+
+    <main class="container narrow">
+      <% if (errors.length > 0) { %>
+        <div class="notice danger">
+          <% errors.forEach((error) => { %>
+            <div><%= error %></div>
+          <% }) %>
+        </div>
+      <% } %>
+
+      <form class="form-grid" method="post" action="<%= action %>">
+        <label>
+          표시 이름
+          <input name="name" value="<%= target.name || '' %>" autocomplete="off">
+        </label>
+
+        <label>
+          데이터베이스
+          <input name="database" value="<%= target.database || '' %>" required autocomplete="off">
+        </label>
+
+        <label>
+          호스트
+          <input name="host" value="<%= target.host || '127.0.0.1' %>" required autocomplete="off">
+        </label>
+
+        <label>
+          포트
+          <input name="port" type="number" min="1" max="65535" value="<%= target.port || 3306 %>" required>
+        </label>
+
+        <label>
+          계정
+          <input name="username" value="<%= target.username || '' %>" required autocomplete="off">
+        </label>
+
+        <label>
+          비밀번호
+          <input name="password" type="password" value="<%= target.password || '' %>" autocomplete="current-password">
+        </label>
+
+        <label class="checkbox">
+          <input name="enabled" type="checkbox" <%= target.enabled ? 'checked' : '' %>>
+          활성화
+        </label>
+
+        <div class="form-actions">
+          <a class="button" href="/">취소</a>
+          <button class="button primary" type="submit"><%= submitLabel %></button>
+        </div>
+      </form>
+    </main>
+  </body>
+</html>
+

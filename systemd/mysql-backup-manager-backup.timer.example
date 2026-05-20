@@ -1,0 +1,12 @@
+[Unit]
+Description=Run MySQL Backup Manager backup job every hour
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+Persistent=true
+Unit=mysql-backup-manager-backup.service
+
+[Install]
+WantedBy=timers.target
+

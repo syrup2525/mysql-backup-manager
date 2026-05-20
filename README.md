@@ -1,0 +1,180 @@
+# MySQL Backup Manager
+
+Rocky Linux 9에서 동작하는 MySQL 백업 관리 도구입니다. Fastify 웹 UI로 백업 대상 DB를 관리하고, systemd timer가 1시간마다 Node.js CLI를 실행해 `mysqldump` 후 rclone으로 Google Drive에 동기화합니다.
+
+## 실행 환경
+
+- Rocky Linux 9 x86_64
+- Node.js 24.14.1 / npm 11.11.0
+- Redis 6.2.20 (`localhost:6379`)
+- MySQL 8.0.46
+- rclone v1.74.0
+- Docker, Kubernetes 없음
+
+## 설치
+
+```bash
+npm install
+npm run build
+```
+
+환경 파일을 준비합니다.
+
+```bash
+cp .env.example .env
+```
+
+`.env.example` 기본값:
+
+```dotenv
+MODE=dev
+WEB_HOST=0.0.0.0
+WEB_PORT=3000
+REDIS_URL=redis://127.0.0.1:6379
+BACKUP_ROOT=/home/user/bak
+RCLONE_REMOTE=gdrive
+```
+
+백업 디렉터리를 준비합니다.
+
+```bash
+sudo mkdir -p /home/user/bak
+sudo chown -R user:user /home/user/bak
+chmod 700 /home/user/bak
+```
+
+## 웹 UI
+
+개발 실행:
+
+```bash
+npm run dev
+```
+
+빌드 후 실행:
+
+```bash
+npm run build
+npm start
+```
+
+브라우저에서 `http://서버주소:3000`으로 접속합니다. 웹 UI에서 백업 대상 추가, 수정, 삭제, DB별 백업 파일 목록 조회를 할 수 있습니다.
+
+Redis에는 `mysql-backup-manager:targets` hash로 백업 대상 정보가 저장됩니다. DB 접속 계정과 비밀번호는 요구사항대로 평문 저장합니다.
+
+## 백업 CLI
+
+수동 실행:
+
+```bash
+npm run build
+npm run backup
+```
+
+CLI 동작:
+
+- Redis에서 활성화된 백업 대상 목록 조회
+- 대상별로 `mysqldump`를 `child_process.spawn`으로 실행
+- `mysqldump` 실행 시 `--password=` 인자 사용
+- `/home/user/bak/{database}/` 아래에 `{database}_yyyy-mm-dd_HH-mm-ss.sql` 파일 생성
+- DB별 `.sql` 파일이 72개를 초과하면 오래된 파일부터 삭제
+- 성공한 백업이 있으면 `rclone sync /home/user/bak {RCLONE_REMOTE}:/bak/{MODE}` 실행
+- 실패 시 Redis의 마지막 백업 결과와 systemd journal에 오류 기록
+
+백업 계정에는 대상 DB에 대한 `SELECT`, `SHOW VIEW`, `TRIGGER`, `EVENT` 권한이 필요할 수 있습니다. 테이블 잠금이 필요한 스토리지 엔진을 사용하면 추가 권한이 필요합니다.
+
+## rclone Google Drive 초기 설정
+
+현재 rclone이 설치만 되어 있다면 최초 1회 remote를 생성합니다. `.env`의 `RCLONE_REMOTE=gdrive`와 같은 이름을 사용하세요.
+
+```bash
+rclone config
+```
+
+권장 흐름:
+
+1. `n` 선택으로 새 remote 생성
+2. `name>`에 `gdrive` 입력
+3. Storage에서 Google Drive 선택
+4. client id/secret은 별도 Google Cloud OAuth 앱이 없으면 비워둠
+5. scope는 운영 정책에 맞게 선택
+6. 서버에 브라우저가 없으면 auto config를 `n`으로 선택하고, 안내되는 authorize 명령을 브라우저가 있는 PC에서 실행한 뒤 token을 서버에 붙여넣음
+7. 설정 완료 후 확인
+
+```bash
+rclone lsd gdrive:
+rclone mkdir gdrive:/bak/dev
+```
+
+`MODE=prod`로 바꾸면 동기화 대상은 `gdrive:/bak/prod`가 됩니다.
+
+## systemd 설정
+
+예시 파일은 `systemd/` 디렉터리에 있습니다. 실제 설치 경로와 실행 사용자를 맞춘 뒤 복사합니다.
+
+```bash
+sudo cp systemd/mysql-backup-manager-web.service.example /etc/systemd/system/mysql-backup-manager-web.service
+sudo cp systemd/mysql-backup-manager-backup.service.example /etc/systemd/system/mysql-backup-manager-backup.service
+sudo cp systemd/mysql-backup-manager-backup.timer.example /etc/systemd/system/mysql-backup-manager-backup.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now mysql-backup-manager-web.service
+sudo systemctl enable --now mysql-backup-manager-backup.timer
+```
+
+상태와 로그 확인:
+
+```bash
+systemctl status mysql-backup-manager-web.service
+systemctl list-timers mysql-backup-manager-backup.timer
+journalctl -u mysql-backup-manager-backup.service -n 100 --no-pager
+```
+
+타이머는 부팅 5분 후 처음 실행하고, 이후 마지막 실행 시점 기준 1시간마다 CLI를 실행합니다.
+
+## PM2 설정
+
+systemd service 대신 PM2로 웹 UI를 실행할 수도 있습니다. PM2는 웹 UI 실행에만 사용하고, `backup-runner` CLI는 위의 systemd timer로만 실행하세요.
+
+PM2 설치:
+
+```bash
+sudo npm install -g pm2
+```
+
+웹 UI 실행:
+
+```bash
+cd /opt/mysql-backup-manager
+npm install --omit=dev
+npm run build
+pm2 start dist/web/server.js --name mysql-backup-manager-web --time
+pm2 save
+```
+
+상태와 로그 확인:
+
+```bash
+pm2 status
+pm2 logs mysql-backup-manager-web
+```
+
+서버 재부팅 후 자동 실행되도록 systemd startup을 등록합니다. 아래 명령의 `user`와 `/home/user`는 실제 실행 계정에 맞게 바꿉니다.
+
+```bash
+pm2 startup systemd -u user --hp /home/user
+```
+
+명령 실행 후 PM2가 출력하는 `sudo env ... pm2 startup ...` 명령을 그대로 한 번 더 실행하고, 마지막으로 저장합니다.
+
+```bash
+pm2 save
+```
+
+웹 UI를 PM2로 실행하는 경우 `/etc/systemd/system/mysql-backup-manager-web.service`는 활성화하지 마세요. 같은 포트에서 두 프로세스가 동시에 실행될 수 있습니다. 백업 CLI는 PM2로 등록하지 말고 `mysql-backup-manager-backup.timer`만 사용하세요.
+
+## 운영 메모
+
+- `.env`의 `MODE` 값은 rclone 동기화 경로에 포함되므로 `dev`, `stage`, `prod`처럼 `/`가 없는 값으로 둡니다.
+- 웹 서버와 backup-runner는 같은 `.env`와 같은 Redis를 사용해야 합니다.
+- `dist/`는 빌드 산출물입니다. systemd 또는 PM2 실행 전 `npm run build`를 실행하세요.
+- Redis에 DB 비밀번호가 평문 저장되므로 서버 계정, Redis 바인딩, 방화벽 접근을 제한하세요.

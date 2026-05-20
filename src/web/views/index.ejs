@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MySQL Backup Manager</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>MySQL Backup Manager</h1>
+        <p>MODE <strong><%= config.mode %></strong> · Redis <strong>localhost:6379</strong> · Root <strong><%= config.backupRoot %></strong></p>
+      </div>
+      <a class="button primary" href="/targets/new">대상 추가</a>
+    </header>
+
+    <main class="container">
+      <% if (notice) { %>
+        <div class="notice"><%= notice %></div>
+      <% } %>
+      <% if (error) { %>
+        <div class="notice danger"><%= error %></div>
+      <% } %>
+
+      <section class="section-head">
+        <h2>백업 대상</h2>
+        <span><%= targets.length %>개</span>
+      </section>
+
+      <% if (targets.length === 0) { %>
+        <div class="empty">
+          <strong>등록된 백업 대상이 없습니다.</strong>
+          <a class="button primary" href="/targets/new">첫 대상 추가</a>
+        </div>
+      <% } else { %>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>상태</th>
+                <th>이름</th>
+                <th>접속</th>
+                <th>DB</th>
+                <th>마지막 결과</th>
+                <th>작업</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% targets.forEach((target) => { %>
+                <tr>
+                  <td>
+                    <span class="status <%= target.enabled ? 'ok' : 'muted' %>"><%= target.enabled ? '활성' : '비활성' %></span>
+                  </td>
+                  <td>
+                    <strong><%= target.name %></strong>
+                    <small>수정 <%= formatDate(target.updatedAt) %></small>
+                  </td>
+                  <td>
+                    <%= target.username %>@<%= target.host %>:<%= target.port %>
+                  </td>
+                  <td><code><%= target.database %></code></td>
+                  <td>
+                    <% if (target.lastResult) { %>
+                      <span class="status <%= target.lastResult.status %>"><%= target.lastResult.status %></span>
+                      <small><%= formatDate(target.lastResult.completedAt || target.lastResult.startedAt) %></small>
+                      <small><%= target.lastResult.message %></small>
+                    <% } else { %>
+                      <span class="status muted">없음</span>
+                    <% } %>
+                  </td>
+                  <td class="actions">
+                    <a class="button" href="/targets/<%= encodeURIComponent(target.id) %>/files">파일</a>
+                    <a class="button" href="/targets/<%= encodeURIComponent(target.id) %>/edit">수정</a>
+                    <form method="post" action="/targets/<%= encodeURIComponent(target.id) %>/delete" onsubmit="return confirm('삭제하시겠습니까?');">
+                      <button class="button danger" type="submit">삭제</button>
+                    </form>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </main>
+  </body>
+</html>
+

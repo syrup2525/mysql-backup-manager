@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><%= target.database %> 파일 · MySQL Backup Manager</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1><%= target.database %></h1>
+        <p><%= config.backupRoot %>/<%= target.database %> · <%= files.length %>개</p>
+      </div>
+      <a class="button" href="/">목록</a>
+    </header>
+
+    <main class="container">
+      <section class="section-head">
+        <h2>백업 파일</h2>
+        <span>최신순</span>
+      </section>
+
+      <% if (files.length === 0) { %>
+        <div class="empty">
+          <strong>생성된 백업 파일이 없습니다.</strong>
+        </div>
+      <% } else { %>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>파일명</th>
+                <th>크기</th>
+                <th>수정 시각</th>
+                <th>경로</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% files.forEach((file) => { %>
+                <tr>
+                  <td><code><%= file.name %></code></td>
+                  <td><%= formatBytes(file.size) %></td>
+                  <td><%= formatDate(file.mtime) %></td>
+                  <td><small><%= file.path %></small></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </main>
+  </body>
+</html>
+

@@ -1,0 +1,19 @@
+[Unit]
+Description=MySQL Backup Manager Web UI
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=user
+Group=user
+WorkingDirectory=/opt/mysql-backup-manager
+EnvironmentFile=/opt/mysql-backup-manager/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/mysql-backup-manager/dist/web/server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+

@@ -1,0 +1,14 @@
+[Unit]
+Description=Run MySQL Backup Manager backup job
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=oneshot
+User=user
+Group=user
+WorkingDirectory=/opt/mysql-backup-manager
+EnvironmentFile=/opt/mysql-backup-manager/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/mysql-backup-manager/dist/cli/backup-runner.js
+
