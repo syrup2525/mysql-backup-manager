@@ -121,6 +121,14 @@ sudo systemctl enable --now mysql-backup-manager-web.service
 sudo systemctl enable --now mysql-backup-manager-backup.timer
 ```
 
+> `sudo systemctl enable --now mysql-backup-manager-web.service` 명령어 대신 아래 `PM2 설정` 으로도 가능합니다.
+
+`mysql-backup-manager-backup.service`는 timer가 호출하는 `oneshot` 서비스입니다. 직접 `enable`하지 않고, 위처럼 `mysql-backup-manager-backup.timer`만 활성화하면 됩니다. 백업을 즉시 한 번 시험 실행하려면 아래 명령을 사용합니다.
+
+```bash
+sudo systemctl start mysql-backup-manager-backup.service
+```
+
 상태와 로그 확인:
 
 ```bash
