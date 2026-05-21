@@ -132,7 +132,7 @@ async function runBackupForTarget(
     console.info(`[${target.database}] mysqldump start -> ${filePath}`);
     await runMysqldump(target, filePath);
 
-    const deletedFiles = await pruneBackupFiles(appConfig.backupRoot, target.database, 72);
+    const deletedFiles = await pruneBackupFiles(appConfig.backupRoot, target.database, appConfig.backupKeepCount);
     console.info(`[${target.database}] local backup complete, pruned=${deletedFiles.length}`);
 
     return { target, filePath, startedAt, deletedFiles };

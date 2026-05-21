@@ -12,6 +12,11 @@ function readInteger(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function readPositiveInteger(name: string, fallback: number): number {
+  const value = readInteger(name, fallback);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
 function readBoolean(name: string, fallback: boolean): boolean {
   const value = process.env[name];
   if (!value) {
@@ -25,6 +30,7 @@ export const appConfig = {
   mode: process.env.MODE || "dev",
   redisUrl: process.env.REDIS_URL || "redis://127.0.0.1:6379",
   backupRoot: process.env.BACKUP_ROOT || "/home/user/bak",
+  backupKeepCount: readPositiveInteger("BACKUP_KEEP_COUNT", 72),
   rcloneRemote: process.env.RCLONE_REMOTE || "gdrive",
   webHost: process.env.WEB_HOST || "0.0.0.0",
   webPort: readInteger("WEB_PORT", 3000),

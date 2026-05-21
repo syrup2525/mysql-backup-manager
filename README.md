@@ -42,6 +42,7 @@ WEB_HOST=0.0.0.0
 WEB_PORT=3000
 REDIS_URL=redis://127.0.0.1:6379
 BACKUP_ROOT=/home/{user_name}/bak
+BACKUP_KEEP_COUNT=72
 RCLONE_REMOTE=gdrive
 AUTH_COOKIE_NAME=session_name
 AUTH_COOKIE_SECURE=false
@@ -124,7 +125,7 @@ CLI 동작:
 - 대상별로 `mysqldump`를 `child_process.spawn`으로 실행
 - `mysqldump` 실행 시 `--password=` 인자 사용
 - `/home/{user_name}/bak/{database}/` 아래에 `{database}_yyyy-mm-dd_HH-mm-ss.sql` 파일 생성
-- DB별 `.sql` 파일이 72개를 초과하면 오래된 파일부터 삭제
+- DB별 `.sql` 파일이 `BACKUP_KEEP_COUNT`개를 초과하면 오래된 파일부터 삭제
 - 성공한 백업이 있으면 `rclone sync /home/{user_name}/bak {RCLONE_REMOTE}:/bak/{MODE}` 실행
 - 실패 시 Redis의 마지막 백업 결과와 systemd journal에 오류 기록
 
