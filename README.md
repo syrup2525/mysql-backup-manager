@@ -74,7 +74,7 @@ npm start
 
 브라우저에서 `http://서버주소:3000`으로 접속합니다. 웹 UI에서 백업 대상 추가, 수정, 삭제, DB별 백업 파일 목록 조회를 할 수 있습니다.
 
-Redis에는 `mysql-backup-manager:targets` hash로 백업 대상 정보가 저장됩니다. DB 접속 계정과 비밀번호는 요구사항대로 평문 저장합니다.
+Redis에는 `mysql-backup-manager:targets` hash로 백업 대상 정보가 저장됩니다.
 
 ## 웹 UI 로그인 계정
 
@@ -109,27 +109,6 @@ redis-cli -h 127.0.0.1 -p 6379 HGET mysql-backup-manager:auth:user username
 로그인 후 상단의 `비밀번호 변경` 메뉴에서 비밀번호를 변경할 수 있습니다. 비밀번호 변경 시 현재 비밀번호, 변경할 비밀번호, 변경할 비밀번호 확인을 입력해야 하며, 기존 로그인 세션은 무효화됩니다.
 
 웹 UI 세션은 Redis에 `mysql-backup-manager:auth:sessions:*` 키로 저장되고, 기본 만료 시간은 `AUTH_SESSION_TTL_SECONDS=28800`입니다. HTTPS 뒤에서 운영할 때는 `.env`의 `AUTH_COOKIE_SECURE=true`를 사용하세요.
-
-## 백업 CLI
-
-수동 실행:
-
-```bash
-npm run build
-npm run backup
-```
-
-CLI 동작:
-
-- Redis에서 활성화된 백업 대상 목록 조회
-- 대상별로 `mysqldump`를 `child_process.spawn`으로 실행
-- `mysqldump` 실행 시 `--password=` 인자 사용
-- `/home/{user_name}/bak/{database}/` 아래에 `{database}_yyyy-mm-dd_HH-mm-ss.sql` 파일 생성
-- DB별 `.sql` 파일이 `BACKUP_KEEP_COUNT`개를 초과하면 오래된 파일부터 삭제
-- 성공한 백업이 있으면 `rclone sync /home/{user_name}/bak {RCLONE_REMOTE}:/bak/{MODE}` 실행
-- 실패 시 Redis의 마지막 백업 결과와 systemd journal에 오류 기록
-
-백업 계정에는 대상 DB에 대한 `SELECT`, `SHOW VIEW`, `TRIGGER`, `EVENT` 권한이 필요할 수 있습니다. 테이블 잠금이 필요한 스토리지 엔진을 사용하면 추가 권한이 필요합니다.
 
 ## rclone Google Drive 초기 설정
 
