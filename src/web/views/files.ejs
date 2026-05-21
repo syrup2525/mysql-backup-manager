@@ -12,7 +12,14 @@
         <h1><%= target.database %></h1>
         <p><%= config.backupRoot %>/<%= target.database %> · <%= files.length %>개</p>
       </div>
-      <a class="button" href="/">목록</a>
+      <nav class="top-actions" aria-label="계정 및 작업">
+        <span class="account"><%= currentUser %></span>
+        <a class="button" href="/password">비밀번호 변경</a>
+        <form method="post" action="/logout">
+          <button class="button" type="submit">로그아웃</button>
+        </form>
+        <a class="button" href="/">목록</a>
+      </nav>
     </header>
 
     <main class="container">
@@ -52,4 +59,3 @@
     </main>
   </body>
 </html>
-

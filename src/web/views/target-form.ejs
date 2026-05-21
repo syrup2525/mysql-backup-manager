@@ -10,9 +10,16 @@
     <header class="topbar">
       <div>
         <h1><%= title %></h1>
-        <p>MODE <strong><%= config.mode %></strong> · 비밀번호는 Redis에 평문 저장됩니다.</p>
+        <p>MODE <strong><%= config.mode %></strong> · DB 접속 비밀번호는 Redis에 평문 저장됩니다.</p>
       </div>
-      <a class="button" href="/">목록</a>
+      <nav class="top-actions" aria-label="계정 및 작업">
+        <span class="account"><%= currentUser %></span>
+        <a class="button" href="/password">비밀번호 변경</a>
+        <form method="post" action="/logout">
+          <button class="button" type="submit">로그아웃</button>
+        </form>
+        <a class="button" href="/">목록</a>
+      </nav>
     </header>
 
     <main class="container narrow">
@@ -68,4 +75,3 @@
     </main>
   </body>
 </html>
-

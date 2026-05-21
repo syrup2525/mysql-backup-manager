@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>로그인 · MySQL Backup Manager</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>MySQL Backup Manager</h1>
+        <p>MODE <strong><%= config.mode %></strong></p>
+      </div>
+    </header>
+
+    <main class="container auth">
+      <% if (notice) { %>
+        <div class="notice"><%= notice %></div>
+      <% } %>
+      <% if (errors.length > 0) { %>
+        <div class="notice danger">
+          <% errors.forEach((error) => { %>
+            <div><%= error %></div>
+          <% }) %>
+        </div>
+      <% } %>
+
+      <form class="form-grid auth-form" method="post" action="/login" autocomplete="on">
+        <input type="hidden" name="next" value="<%= next %>">
+
+        <label>
+          계정
+          <input name="username" value="<%= username || '' %>" required autofocus autocomplete="username">
+        </label>
+
+        <label>
+          비밀번호
+          <input name="password" type="password" required autocomplete="current-password">
+        </label>
+
+        <div class="form-actions">
+          <button class="button primary" type="submit">로그인</button>
+        </div>
+      </form>
+    </main>
+  </body>
+</html>
+

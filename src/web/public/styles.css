@@ -40,6 +40,29 @@ a {
   margin: 0;
 }
 
+.top-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.top-actions form {
+  margin: 0;
+}
+
+.account {
+  background: #eef1ea;
+  border: 1px solid #d7ddd1;
+  border-radius: 999px;
+  color: #4d584b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 9px 11px;
+}
+
 .container {
   margin: 0 auto;
   max-width: 1180px;
@@ -48,6 +71,10 @@ a {
 
 .container.narrow {
   max-width: 760px;
+}
+
+.container.auth {
+  max-width: 520px;
 }
 
 .section-head {
@@ -227,6 +254,10 @@ code {
   padding: 24px;
 }
 
+.auth-form {
+  margin-top: 24px;
+}
+
 label {
   color: #4d584b;
   display: grid;
@@ -271,6 +302,7 @@ input:focus {
 
 @media (max-width: 720px) {
   .topbar,
+  .top-actions,
   .empty,
   .form-actions {
     align-items: stretch;

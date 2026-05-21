@@ -4,6 +4,7 @@ import fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { createAuthStore, type AuthStore } from "../shared/auth.js";
 import { appConfig } from "../shared/config.js";
 import { listBackupFiles } from "../shared/files.js";
 import { isSafePathSegment } from "../shared/paths.js";
@@ -14,6 +15,14 @@ type FormBody = Record<string, string | string[] | undefined>;
 
 const viewsDir = path.join(process.cwd(), "src/web/views");
 const stylesPath = path.join(process.cwd(), "src/web/public/styles.css");
+const publicPaths = new Set(["/healthz", "/login", "/styles.css"]);
+
+declare module "fastify" {
+  interface FastifyRequest {
+    authUser?: string;
+    sessionToken?: string;
+  }
+}
 
 function firstValue(body: FormBody, key: string): string {
   const value = body[key];
@@ -82,9 +91,71 @@ function targetToInput(target: BackupTarget): BackupTargetInput {
   };
 }
 
+function parseCookies(cookieHeader: string | undefined): Record<string, string> {
+  if (!cookieHeader) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    cookieHeader
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const separator = part.indexOf("=");
+        if (separator === -1) {
+          return [part, ""];
+        }
+
+        const rawValue = part.slice(separator + 1);
+        try {
+          return [part.slice(0, separator), decodeURIComponent(rawValue)];
+        } catch {
+          return [part.slice(0, separator), rawValue];
+        }
+      })
+  );
+}
+
+function getSessionToken(cookieHeader: string | undefined): string | undefined {
+  return parseCookies(cookieHeader)[appConfig.authCookieName];
+}
+
+function cookieAttributes(maxAge: number): string {
+  return [
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Strict",
+    `Max-Age=${maxAge}`,
+    appConfig.authCookieSecure ? "Secure" : ""
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
+function setSessionCookie(reply: FastifyReply, token: string): void {
+  reply.header(
+    "Set-Cookie",
+    `${appConfig.authCookieName}=${encodeURIComponent(token)}; ${cookieAttributes(appConfig.authSessionTtlSeconds)}`
+  );
+}
+
+function clearSessionCookie(reply: FastifyReply): void {
+  reply.header("Set-Cookie", `${appConfig.authCookieName}=; ${cookieAttributes(0)}`);
+}
+
+function safeNextPath(value: string | undefined): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return "/";
+  }
+
+  return value;
+}
+
 async function renderView(name: string, data: Record<string, unknown>): Promise<string> {
   return ejs.renderFile(path.join(viewsDir, `${name}.ejs`), {
     ...data,
+    currentUser: data.currentUser ?? null,
     config: appConfig,
     formatDate(value?: string | Date) {
       if (!value) {
@@ -116,10 +187,28 @@ function redirect(reply: FastifyReply, location: string): FastifyReply {
   return reply.code(303).header("Location", location).send();
 }
 
-export function buildServer(store: BackupTargetStore): FastifyInstance {
+export function buildServer(store: BackupTargetStore, authStore: AuthStore): FastifyInstance {
   const app = fastify({ logger: true });
 
   void app.register(formbody);
+
+  app.addHook("preHandler", async (request, reply) => {
+    const pathname = new URL(request.url, "http://localhost").pathname;
+    if (publicPaths.has(pathname)) {
+      return;
+    }
+
+    const token = getSessionToken(request.headers.cookie);
+    const session = token ? await authStore.getSession(token) : null;
+    if (!token || !session) {
+      clearSessionCookie(reply);
+      const next = request.method === "GET" ? `?next=${encodeURIComponent(request.url)}` : "";
+      return redirect(reply, `/login${next}`);
+    }
+
+    request.authUser = session.username;
+    request.sessionToken = token;
+  });
 
   app.get("/healthz", async () => ({ ok: true, mode: appConfig.mode }));
 
@@ -128,13 +217,86 @@ export function buildServer(store: BackupTargetStore): FastifyInstance {
     return reply.type("text/css; charset=utf-8").send(css);
   });
 
+  app.get("/login", async (request, reply) => {
+    const query = request.query as { next?: string; error?: string; notice?: string };
+    const token = getSessionToken(request.headers.cookie);
+    const session = token ? await authStore.getSession(token) : null;
+    if (session) {
+      return redirect(reply, safeNextPath(query.next));
+    }
+
+    const html = await renderView("login", {
+      errors: query.error ? [query.error] : [],
+      notice: query.notice,
+      next: safeNextPath(query.next),
+      username: ""
+    });
+
+    return reply.type("text/html; charset=utf-8").send(html);
+  });
+
+  app.post("/login", async (request, reply) => {
+    const body = (request.body ?? {}) as FormBody;
+    const username = firstValue(body, "username").trim();
+    const password = firstValue(body, "password");
+    const next = safeNextPath(firstValue(body, "next"));
+
+    if (!username || !password) {
+      const html = await renderView("login", {
+        errors: ["계정과 비밀번호를 입력하세요."],
+        notice: null,
+        next,
+        username
+      });
+
+      return reply.code(400).type("text/html; charset=utf-8").send(html);
+    }
+
+    const user = await authStore.getUser();
+    if (!user) {
+      const html = await renderView("login", {
+        errors: ["관리자 계정이 아직 Redis에 생성되지 않았습니다. README의 초기 계정 생성 명령을 먼저 실행하세요."],
+        notice: null,
+        next,
+        username
+      });
+
+      return reply.code(503).type("text/html; charset=utf-8").send(html);
+    }
+
+    const verified = await authStore.verifyPassword(username, password);
+    if (!verified) {
+      const html = await renderView("login", {
+        errors: ["계정 또는 비밀번호가 올바르지 않습니다."],
+        notice: null,
+        next,
+        username
+      });
+
+      return reply.code(401).type("text/html; charset=utf-8").send(html);
+    }
+
+    setSessionCookie(reply, await authStore.createSession(username));
+    return redirect(reply, next);
+  });
+
+  app.post("/logout", async (request, reply) => {
+    if (request.sessionToken) {
+      await authStore.deleteSession(request.sessionToken);
+    }
+
+    clearSessionCookie(reply);
+    return redirect(reply, "/login?notice=%EB%A1%9C%EA%B7%B8%EC%95%84%EC%9B%83%ED%96%88%EC%8A%B5%EB%8B%88%EB%8B%A4.");
+  });
+
   app.get("/", async (request, reply) => {
     const query = request.query as { notice?: string; error?: string };
     const targets = await store.listTargets();
     const html = await renderView("index", {
       targets,
       notice: query.notice,
-      error: query.error
+      error: query.error,
+      currentUser: request.authUser
     });
 
     return reply.type("text/html; charset=utf-8").send(html);
@@ -146,6 +308,7 @@ export function buildServer(store: BackupTargetStore): FastifyInstance {
       action: "/targets",
       submitLabel: "추가",
       errors: [],
+      currentUser: _request.authUser,
       target: {
         name: "",
         host: "127.0.0.1",
@@ -169,7 +332,8 @@ export function buildServer(store: BackupTargetStore): FastifyInstance {
         action: "/targets",
         submitLabel: "추가",
         errors,
-        target: body
+        target: body,
+        currentUser: request.authUser
       });
 
       return reply.code(400).type("text/html; charset=utf-8").send(html);
@@ -191,7 +355,8 @@ export function buildServer(store: BackupTargetStore): FastifyInstance {
       action: `/targets/${encodeURIComponent(id)}`,
       submitLabel: "저장",
       errors: [],
-      target: targetToInput(target)
+      target: targetToInput(target),
+      currentUser: request.authUser
     });
 
     return reply.type("text/html; charset=utf-8").send(html);
@@ -212,7 +377,8 @@ export function buildServer(store: BackupTargetStore): FastifyInstance {
         action: `/targets/${encodeURIComponent(id)}`,
         submitLabel: "저장",
         errors,
-        target: body
+        target: body,
+        currentUser: request.authUser
       });
 
       return reply.code(400).type("text/html; charset=utf-8").send(html);
@@ -236,12 +402,68 @@ export function buildServer(store: BackupTargetStore): FastifyInstance {
     }
 
     const files = await listBackupFiles(appConfig.backupRoot, target.database);
-    const html = await renderView("files", { target, files });
+    const html = await renderView("files", { target, files, currentUser: request.authUser });
     return reply.type("text/html; charset=utf-8").send(html);
+  });
+
+  app.get("/password", async (request, reply) => {
+    const query = request.query as { notice?: string };
+    const html = await renderView("password", {
+      errors: [],
+      notice: query.notice,
+      currentUser: request.authUser
+    });
+
+    return reply.type("text/html; charset=utf-8").send(html);
+  });
+
+  app.post("/password", async (request, reply) => {
+    const body = (request.body ?? {}) as FormBody;
+    const currentPassword = firstValue(body, "currentPassword");
+    const nextPassword = firstValue(body, "nextPassword");
+    const confirmPassword = firstValue(body, "confirmPassword");
+    const errors: string[] = [];
+
+    if (!currentPassword) {
+      errors.push("현재 비밀번호를 입력하세요.");
+    }
+
+    if (nextPassword.length < 8) {
+      errors.push("변경할 비밀번호는 8자 이상이어야 합니다.");
+    }
+
+    if (nextPassword !== confirmPassword) {
+      errors.push("변경할 비밀번호와 확인 값이 일치하지 않습니다.");
+    }
+
+    if (errors.length === 0) {
+      const changed = await authStore.changePassword(request.authUser || "", currentPassword, nextPassword);
+      if (!changed) {
+        errors.push("현재 비밀번호가 올바르지 않습니다.");
+      }
+    }
+
+    if (errors.length > 0) {
+      const html = await renderView("password", {
+        errors,
+        notice: null,
+        currentUser: request.authUser
+      });
+
+      return reply.code(400).type("text/html; charset=utf-8").send(html);
+    }
+
+    if (request.sessionToken) {
+      await authStore.deleteSession(request.sessionToken);
+    }
+
+    setSessionCookie(reply, await authStore.createSession(request.authUser || ""));
+    return redirect(reply, "/password?notice=%EB%B9%84%EB%B0%80%EB%B2%88%ED%98%B8%EB%A5%BC%20%EB%B3%80%EA%B2%BD%ED%96%88%EC%8A%B5%EB%8B%88%EB%8B%A4.");
   });
 
   app.addHook("onClose", async () => {
     await store.close();
+    await authStore.close();
   });
 
   return app;
@@ -249,7 +471,8 @@ export function buildServer(store: BackupTargetStore): FastifyInstance {
 
 async function main(): Promise<void> {
   const store = await createBackupTargetStore();
-  const app = buildServer(store);
+  const authStore = await createAuthStore();
+  const app = buildServer(store, authStore);
 
   await app.listen({
     host: appConfig.webHost,

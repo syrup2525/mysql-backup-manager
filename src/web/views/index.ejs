@@ -12,7 +12,14 @@
         <h1>MySQL Backup Manager</h1>
         <p>MODE <strong><%= config.mode %></strong> · Redis <strong>localhost:6379</strong> · Root <strong><%= config.backupRoot %></strong></p>
       </div>
-      <a class="button primary" href="/targets/new">대상 추가</a>
+      <nav class="top-actions" aria-label="계정 및 작업">
+        <span class="account"><%= currentUser %></span>
+        <a class="button" href="/password">비밀번호 변경</a>
+        <form method="post" action="/logout">
+          <button class="button" type="submit">로그아웃</button>
+        </form>
+        <a class="button primary" href="/targets/new">대상 추가</a>
+      </nav>
     </header>
 
     <main class="container">
@@ -85,4 +92,3 @@
     </main>
   </body>
 </html>
-

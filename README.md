@@ -43,6 +43,9 @@ WEB_PORT=3000
 REDIS_URL=redis://127.0.0.1:6379
 BACKUP_ROOT=/home/{user_name}/bak
 RCLONE_REMOTE=gdrive
+AUTH_COOKIE_NAME=session_name
+AUTH_COOKIE_SECURE=false
+AUTH_SESSION_TTL_SECONDS=28800
 ```
 
 백업 디렉터리를 준비합니다.
@@ -71,6 +74,40 @@ npm start
 브라우저에서 `http://서버주소:3000`으로 접속합니다. 웹 UI에서 백업 대상 추가, 수정, 삭제, DB별 백업 파일 목록 조회를 할 수 있습니다.
 
 Redis에는 `mysql-backup-manager:targets` hash로 백업 대상 정보가 저장됩니다. DB 접속 계정과 비밀번호는 요구사항대로 평문 저장합니다.
+
+## 웹 UI 로그인 계정
+
+웹 UI는 로그인 후 사용할 수 있습니다. 최초 관리자 계정은 서버의 localhost Redis에 `redis-cli`로 직접 생성합니다.
+
+아래 예시는 계정 `admin`을 생성합니다. 비밀번호는 프롬프트에서 입력받습니다.
+
+```bash
+ADMIN_USER='admin'
+read -rsp 'Initial admin password: ' ADMIN_PASSWORD
+echo
+AUTH_SALT="$(openssl rand -hex 16)"
+AUTH_HASH="$(ADMIN_PASSWORD="$ADMIN_PASSWORD" AUTH_SALT="$AUTH_SALT" node -e "const { pbkdf2Sync } = require('node:crypto'); console.log(pbkdf2Sync(process.env.ADMIN_PASSWORD, process.env.AUTH_SALT, 310000, 32, 'sha256').toString('hex'));")"
+SESSION_VERSION="$(openssl rand -hex 16)"
+
+redis-cli -h 127.0.0.1 -p 6379 HSET mysql-backup-manager:auth:user \
+  username "$ADMIN_USER" \
+  passwordHash "$AUTH_HASH" \
+  passwordSalt "$AUTH_SALT" \
+  passwordIterations "310000" \
+  passwordDigest "sha256" \
+  sessionVersion "$SESSION_VERSION" \
+  updatedAt "$(date -Is)"
+```
+
+계정 확인:
+
+```bash
+redis-cli -h 127.0.0.1 -p 6379 HGET mysql-backup-manager:auth:user username
+```
+
+로그인 후 상단의 `비밀번호 변경` 메뉴에서 비밀번호를 변경할 수 있습니다. 비밀번호 변경 시 현재 비밀번호, 변경할 비밀번호, 변경할 비밀번호 확인을 입력해야 하며, 기존 로그인 세션은 무효화됩니다.
+
+웹 UI 세션은 Redis에 `mysql-backup-manager:auth:sessions:*` 키로 저장되고, 기본 만료 시간은 `AUTH_SESSION_TTL_SECONDS=28800`입니다. HTTPS 뒤에서 운영할 때는 `.env`의 `AUTH_COOKIE_SECURE=true`를 사용하세요.
 
 ## 백업 CLI
 
