@@ -203,7 +203,11 @@ sudo npm install -g pm2
 cd /opt/mysql-backup-manager
 npm install --omit=dev
 npm run build
-pm2 start dist/web/server.js --name mysql-backup-manager-web --time
+pm2 start npm \
+  --name mysql-backup-manager-web \
+  --cwd /opt/mysql-backup-manager \
+  --time \
+  -- start
 pm2 save
 ```
 
